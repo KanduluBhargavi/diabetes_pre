@@ -1,180 +1,3 @@
-# # """
-# # AI Diabetes Risk Analyzer — FastAPI Backend
-# # Run: uvicorn main:app --reload
-# # """
-# # from fastapi import FastAPI
-# # from fastapi.middleware.cors import CORSMiddleware
-# # from pydantic import BaseModel
-# # from typing import Optional
-# # import joblib, pandas as pd, os
-
-# # app = FastAPI(title="AI Diabetes Risk Analyzer")
-# # app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# # BASE = os.path.dirname(os.path.abspath(__file__))
-# # model  = joblib.load(os.path.join(BASE, "models/diabetes_model.pkl"))
-# # scaler = joblib.load(os.path.join(BASE, "models/scaler.pkl"))
-# # SMOKING = {"never": 0, "former": 1, "current": 2}
-
-# # class Patient(BaseModel):
-# #     gender: str
-# #     age: float
-# #     hypertension: int
-# #     heart_disease: int
-# #     bmi: float
-# #     hba1c: float
-# #     glucose: float
-# #     smoking_status: str
-# #     mode: Optional[str] = "general"
-
-# # @app.get("/")
-# # def root(): return {"status": "AI Diabetes Risk Analyzer running ✅"}
-
-# # @app.post("/predict")
-# # def predict(data: Patient):
-# #     gender  = 1 if data.gender.lower() == "male" else 0
-# #     smoking = SMOKING.get(data.smoking_status.lower(), 0)
-
-# #     df = pd.DataFrame([[
-# #         gender, data.age, data.hypertension, data.heart_disease,
-# #         smoking, data.bmi, data.hba1c, data.glucose
-# #     ]], columns=[
-# #         "gender", "age", "hypertension", "heart_disease",
-# #         "smoking_history", "bmi", "HbA1c_level", "blood_glucose_level"
-# #     ])
-
-# #     prob = float(model.predict_proba(scaler.transform(df))[0][1])
-
-# #     # Base response
-# #     response = {
-# #         "risk": prob,
-# #         "risk_percent": round(prob * 100, 1),
-# #         "risk_level": "High" if prob > 0.30 else "Moderate" if prob > 0.15 else "Low",
-# #         "mode": data.mode
-# #     }
-
-# #     # Doctor mode gets extra info
-# #     if data.mode == "doctor":
-# #         response["model_info"] = {
-# #             "model": "RandomForestClassifier",
-# #             "n_estimators": 100,
-# #             "features": 8,
-# #             "scaler": "StandardScaler",
-# #             "predict_proba": round(prob, 6)
-# #         }
-# #         response["inputs_encoded"] = {
-# #             "gender": gender, "age": data.age,
-# #             "hypertension": data.hypertension,
-# #             "heart_disease": data.heart_disease,
-# #             "smoking_history": smoking,
-# #             "bmi": data.bmi,
-# #             "HbA1c_level": data.hba1c,
-# #             "blood_glucose_level": data.glucose
-# #         }
-
-# #     return response
-
-# """
-# AI Diabetes Risk Analyzer — FastAPI Backend
-# Run: uvicorn main:app --reload
-# """
-# from fastapi import FastAPI
-# from fastapi.middleware.cors import CORSMiddleware
-# from pydantic import BaseModel
-# from typing import Optional
-# import joblib, pandas as pd, os
-
-# app = FastAPI(title="AI Diabetes Risk Analyzer")
-# app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# BASE = os.path.dirname(os.path.abspath(__file__))
-# model  = joblib.load(os.path.join(BASE, "models/diabetes_model.pkl"))
-# scaler = joblib.load(os.path.join(BASE, "models/scaler.pkl"))
-# SMOKING = {"never": 0, "former": 1, "current": 2}
-
-# class Patient(BaseModel):
-#     gender: str
-#     age: float
-#     hypertension: int
-#     heart_disease: int
-#     bmi: float
-#     hba1c: float
-#     glucose: float
-#     smoking_status: str
-#     mode: Optional[str] = "general"
-
-# @app.get("/")
-# def root(): return {"status": "AI Diabetes Risk Analyzer running ✅"}
-
-# @app.post("/predict")
-# def predict(data: Patient):
-#     gender  = 1 if data.gender.lower() == "male" else 0
-#     smoking = SMOKING.get(data.smoking_status.lower(), 0)
-
-#     df = pd.DataFrame([[
-#         gender, data.age, data.hypertension, data.heart_disease,
-#         smoking, data.bmi, data.hba1c, data.glucose
-#     ]], columns=[
-#         "gender", "age", "hypertension", "heart_disease",
-#         "smoking_history", "bmi", "HbA1c_level", "blood_glucose_level"
-#     ])
-
-#     prob = float(model.predict_proba(scaler.transform(df))[0][1])
-
-#     # ── CLINICAL PENALTY ADJUSTMENT ──────────────────────────
-#     # The Random Forest gives hypertension/smoking/heart_disease
-#     # only 2-4% importance due to dataset bias.
-#     # We apply evidence-based clinical adjustments on top
-#     # (same approach as Framingham Risk Score, ADA Risk Calculator)
-#     penalty = 0.0
-
-#     if data.hypertension == 1:
-#         penalty += 0.04   # +4% — hypertension linked to insulin resistance
-#     if data.heart_disease == 1:
-#         penalty += 0.03   # +3% — shared cardiometabolic pathway
-#     if data.smoking_status == "current":
-#         penalty += 0.04   # +4% — nicotine impairs insulin sensitivity
-#     if data.smoking_status == "former":
-#         penalty += 0.02   # +2% — residual risk
-#     if data.hypertension == 1 and data.heart_disease == 1:
-#         penalty += 0.02   # +2% extra — combined comorbidity
-#     if data.hypertension == 1 and data.smoking_status == "current":
-#         penalty += 0.02   # +2% extra — combined risk
-
-#     # Cap final risk at 0.99
-#     adjusted_prob = min(0.99, prob + penalty)
-#     # ─────────────────────────────────────────────────────────
-
-#     # Base response
-#     response = {
-#         "risk": adjusted_prob,
-#         "risk_percent": round(adjusted_prob * 100, 1),
-#         "risk_level": "High" if adjusted_prob > 0.30 else "Moderate" if adjusted_prob > 0.15 else "Low",
-#         "mode": data.mode,
-#         "model_raw": round(prob, 4),
-#         "clinical_adjustment": round(penalty, 4)
-#     }
-
-#     # Doctor mode gets extra info
-#     if data.mode == "doctor":
-#         response["model_info"] = {
-#             "model": "RandomForestClassifier",
-#             "n_estimators": 100,
-#             "features": 8,
-#             "scaler": "StandardScaler",
-#             "predict_proba": round(prob, 6)
-#         }
-#         response["inputs_encoded"] = {
-#             "gender": gender, "age": data.age,
-#             "hypertension": data.hypertension,
-#             "heart_disease": data.heart_disease,
-#             "smoking_history": smoking,
-#             "bmi": data.bmi,
-#             "HbA1c_level": data.hba1c,
-#             "blood_glucose_level": data.glucose
-#         }
-
-#     return response
 
 """
 AI Diabetes Risk Analyzer — FastAPI Backend
@@ -283,14 +106,24 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 # Load ML model
 BASE = os.path.dirname(os.path.abspath(__file__))
 try:
-    model  = joblib.load(os.path.join(BASE, "models/diabetes_model.pkl"))
-    scaler = joblib.load(os.path.join(BASE, "models/scaler.pkl"))
+    rf_model=joblib.load(os.path.join(BASE, "models/rf_model.pkl"))
+    calibrated_model=joblib.load(os.path.join(BASE, "models/calibrated_model.pkl"))
+    scaler=joblib.load(os.path.join(BASE, "models/scaler.pkl"))
     print("✅ ML models loaded")
 except Exception as e:
     print(f"⚠️ {e}")
-    model = scaler = None
+    rf_model = None
+    calibrated_model = None
+    scaler = None
 
-SMOKING = {"never": 0, "former": 1, "current": 2}
+SMOKING = {
+    "never": 0,
+    "former": 1,
+    "current": 2,
+    "no info": 0,
+    "not current": 1,
+    "ever": 1
+}
 
 # ══════════════════════════════════
 #  SCHEMAS
@@ -365,20 +198,47 @@ def me(user: User = Depends(get_user)):
     return {"id": user.id, "name": user.name, "email": user.email, "role": user.role}
 
 @app.post("/predict")
+
 def predict(data: PredictIn, user: User = Depends(get_user)):
-    if not model or not scaler:
+    if not calibrated_model or not scaler:
         raise HTTPException(503, "ML model not loaded")
 
     gender  = 1 if data.gender.lower() == "male" else 0
     smoking = SMOKING.get(data.smoking_status.lower(), 0)
 
-    df = pd.DataFrame([[gender, data.age, data.hypertension, data.heart_disease,
-                        smoking, data.bmi, data.hba1c, data.glucose]],
-                      columns=["gender","age","hypertension","heart_disease",
-                               "smoking_history","bmi","HbA1c_level","blood_glucose_level"])
+    # Engineered Features
+    metabolic_risk = data.bmi * data.hba1c
+    cardio_risk = data.hypertension + data.heart_disease
 
-    prob = float(model.predict_proba(scaler.transform(df))[0][1])
+    # Full 10-feature input
+    df = pd.DataFrame([[
+    gender,
+    data.age,
+    data.hypertension,
+    data.heart_disease,
+    smoking,
+    data.bmi,
+    data.hba1c,
+    data.glucose,
+    metabolic_risk,
+    cardio_risk
+    ]], columns=[
+    "gender",
+    "age",
+    "hypertension",
+    "heart_disease",
+    "smoking_history",
+    "bmi",
+    "HbA1c_level",
+    "blood_glucose_level",
+    "metabolic_risk",
+    "cardio_risk"
+    ])
 
+    scaled = scaler.transform(df)
+
+    # Use calibrated model for probability
+    prob = float(calibrated_model.predict_proba(scaled)[0][1])
     # Clinical penalty
     penalty = 0.0
     if data.hypertension == 1:           penalty += 0.04
@@ -397,6 +257,29 @@ def predict(data: PredictIn, user: User = Depends(get_user)):
         "clinical_adjustment": round(penalty, 4),
         "mode": data.mode
     }
+
+@app.get("/feature-importance")
+def feature_importance(user: User = Depends(get_user)):
+
+    if not rf_model:
+        raise HTTPException(503, "RF model not loaded")
+    importance = pd.DataFrame({
+        "feature": [
+            "gender",
+            "age",
+            "hypertension",
+            "heart_disease",
+            "smoking_history",
+            "bmi",
+            "HbA1c_level",
+            "blood_glucose_level",
+            "metabolic_risk",
+            "cardio_risk"
+        ],
+        "importance": rf_model.feature_importances_
+    }).sort_values("importance", ascending=False)
+
+    return importance.to_dict(orient="records")
 
 # ── Patient routes (doctor only) ──
 @app.get("/patients")

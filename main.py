@@ -116,14 +116,24 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 # Load ML model
 BASE = os.path.dirname(os.path.abspath(__file__))
 try:
-    model  = joblib.load(os.path.join(BASE, "models/diabetes_model.pkl"))
-    scaler = joblib.load(os.path.join(BASE, "models/scaler.pkl"))
+    rf_model=joblib.load(os.path.join(BASE, "models/rf_model.pkl"))
+    calibrated_model=joblib.load(os.path.join(BASE, "models/calibrated_model.pkl"))
+    scaler=joblib.load(os.path.join(BASE, "models/scaler.pkl"))
     print("✅ ML models loaded")
 except Exception as e:
     print(f"⚠️ {e}")
-    model = scaler = None
+    scaler = None
+    calibrated_model = None
+    rf_model= None
 
-SMOKING = {"never": 0, "former": 1, "current": 2}
+SMOKING = {
+    "never": 0,
+    "former": 1,
+    "current": 2,
+    "no info": 0,
+    "not current": 1,
+    "ever": 1
+}
 
 # ══════════════════════════════════
 #  SCHEMAS
@@ -199,18 +209,45 @@ def me(user: User = Depends(get_user)):
 
 @app.post("/predict")
 def predict(data: PredictIn, user: User = Depends(get_user)):
-    if not model or not scaler:
+    if not calibrated_model or not scaler:
         raise HTTPException(503, "ML model not loaded")
 
     gender  = 1 if data.gender.lower() == "male" else 0
     smoking = SMOKING.get(data.smoking_status.lower(), 0)
 
-    df = pd.DataFrame([[gender, data.age, data.hypertension, data.heart_disease,
-                        smoking, data.bmi, data.hba1c, data.glucose]],
-                      columns=["gender","age","hypertension","heart_disease",
-                               "smoking_history","bmi","HbA1c_level","blood_glucose_level"])
+    # Engineered Features
+    metabolic_risk = data.bmi * data.hba1c
+    cardio_risk = data.hypertension + data.heart_disease
 
-    prob = float(model.predict_proba(scaler.transform(df))[0][1])
+    # Full 10-feature input
+    df = pd.DataFrame([[
+    gender,
+    data.age,
+    data.hypertension,
+    data.heart_disease,
+    smoking,
+    data.bmi,
+    data.hba1c,
+    data.glucose,
+    metabolic_risk,
+    cardio_risk
+    ]], columns=[
+    "gender",
+    "age",
+    "hypertension",
+    "heart_disease",
+    "smoking_history",
+    "bmi",
+    "HbA1c_level",
+    "blood_glucose_level",
+    "metabolic_risk",
+    "cardio_risk"
+    ])
+
+    scaled = scaler.transform(df)
+
+    # Use calibrated model for probability
+    prob = float(calibrated_model.predict_proba(scaled)[0][1])
 
     # Clinical penalty adjustment
     # (Framingham Risk Score methodology)
@@ -233,6 +270,30 @@ def predict(data: PredictIn, user: User = Depends(get_user)):
         "clinical_adjustment": round(penalty, 4),
         "mode": data.mode
     }
+
+@app.get("/feature-importance")
+def feature_importance(user: User = Depends(get_user)):
+
+    if not rf_model:
+        raise HTTPException(503, "RF model not loaded")
+    importance = pd.DataFrame({
+        "feature": [
+            "gender",
+            "age",
+            "hypertension",
+            "heart_disease",
+            "smoking_history",
+            "bmi",
+            "HbA1c_level",
+            "blood_glucose_level",
+            "metabolic_risk",
+            "cardio_risk"
+        ],
+        "importance": rf_model.feature_importances_
+    }).sort_values("importance", ascending=False)
+
+    return importance.to_dict(orient="records")
+
 
 # ── Patient routes (doctor only) ──
 @app.get("/patients")
